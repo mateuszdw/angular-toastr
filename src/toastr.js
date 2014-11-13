@@ -41,7 +41,7 @@ angular.module('toastr', [])
         };
 
         element.on('mouseleave', function() {
-          if (scope.options.timeOut === 0 && scope.options.extendedTimeOut === 0) { return; }
+          if (scope.options.timeOut === 0 || scope.options.extendedTimeOut === 0) {return;}
           timeout = createTimeout(scope.options.extendedTimeOut);
         });
 
@@ -72,12 +72,18 @@ angular.module('toastr', [])
     tapToDismiss: true,
     timeOut: 5000,
     titleClass: 'toast-title',
-    toastClass: 'toast'
+    toastClass: 'toast',
+    toastMaxQuantity: 1,
+    appendToastTo: '#toastr-notifications',
+    roomObject: null,
+    userObject:null,
+    showCountdown: false
   })
 
-  .factory('toastr', ['$animate', '$compile', '$document', '$rootScope', '$sce', 'toastrConfig', '$q', function($animate, $compile, $document, $rootScope, $sce, toastrConfig, $q) {
+  .factory('toastr', ['$animate', '$compile', '$document', '$rootScope', '$sce', 'toastrConfig', '$q','$timeout', function($animate, $compile, $document, $rootScope, $sce, toastrConfig, $q,$timeout) {
     var container, index = 0, toasts = [];
     var containerDefer = $q.defer();
+    var counterTimeout;
 
     var toastr = {
       clear: clear,
@@ -149,7 +155,8 @@ angular.module('toastr', [])
       container.attr('id', options.containerId);
       container.addClass(options.positionClass);
       container.css({'pointer-events': 'auto'});
-      var body = $document.find('body').eq(0);
+      appendTo = options.appendToastTo ? options.appendToastTo : 'body'
+      var body = $document.find(appendTo).eq(0);
       $animate.enter(container, body).then(function() {
         containerDefer.resolve();
       });
@@ -169,10 +176,15 @@ angular.module('toastr', [])
         newToast.iconClass = map.optionsOverride.iconClass || newToast.iconClass;
       }
 
+      if(toasts.length >= options.toastMaxQuantity){
+        var r = toasts[toasts.length-options.toastMaxQuantity]['toastId']
+        remove(r)
+      }
+
       createScope(newToast, map, options);
 
       newToast.el = createToast(newToast.scope);
-
+      
       toasts.push(newToast);
 
       _setContainer(options).then(function() {
@@ -197,6 +209,30 @@ angular.module('toastr', [])
         } else {
           toast.scope.title = map.title;
           toast.scope.message = map.message;
+        }
+
+        // custom objects pass through options
+        if(options.roomObject)
+            toast.scope.roomObject = options.roomObject
+        if(options.userObject)
+            toast.scope.userObject = options.userObject
+
+        var onCounter = function(){
+          toast.scope.counter--
+          if(toast.scope.counter <= 0){
+             $timeout.cancel(counterTimeout);
+          } else {
+            counterTimeout = $timeout(onCounter, 1000);
+          }
+        }
+
+        // custom counter
+        if(options.showCountdown)
+            toast.scope.counter = (options.timeOut/1000)
+
+        if (toast.scope.counter > 0){
+            $timeout.cancel(counterTimeout);
+            counterTimeout = $timeout(onCounter, 1000);
         }
 
         toast.scope.toastType = toast.iconClass;
@@ -224,9 +260,9 @@ angular.module('toastr', [])
 
     function remove(toastIndex) {
       var toast = findToast(toastIndex);
-
+      
       if (toast) { // Avoid clicking when fading out
-
+      
         $animate.leave(toast.el).then(function() {
           toast.scope.$destroy();
           if (container && container.children().length === 0) {
@@ -246,4 +282,26 @@ angular.module('toastr', [])
         }
       }
     }
-  }]);
+  }])
+  .run(['$templateCache', function($templateCache) {
+      'use strict';
+
+      $templateCache.put('templates/toastr/toastr.html',
+        "<div class=\"{{toastClass}} {{toastType}}\" ng-click=\"tapToast()\">\n" +
+        "  <div ng-switch on=\"allowHtml\">\n" +
+        "    <div ng-switch-default ng-if=\"title\" class=\"{{titleClass}}\">{{title}}</div>\n" +
+        "    <div ng-switch-default class=\"{{messageClass}}\">{{message}}</div>\n" +
+        "    <div ng-switch-when=\"true\" ng-if=\"title\" class=\"{{titleClass}}\" ng-bind-html=\"title\"></div>\n" +
+        "    <div ng-switch-when=\"true\" class=\"{{messageClass}}\" ng-bind-html=\"message\"></div>\n" +
+        "  </div>\n" +
+        "  <div ng-if=\"userObject\" ng-include=\"user_label = userObject;'user_label.html'\"></div>\n" +
+        "  <div ng-if=\"roomObject\" ng-include=\"room = roomObject;'room_label.html'\" ng-click=\"enterRoom(roomObject.id)\" class=\"room_l small\"></div>\n" +
+        "  <div ng-if=\"counter\" class=\"count-down\">{{counter}}</div>" +
+        "  <div ng-if=\"counter <= 0\" ng-init=\"enterRoom(roomObject.id)\">ENTER ROOM NOW!</div>" +
+        "  <div ng-if=\"userObject\" ng-click=\"unFollowNow(userObject.id)\">click to stop follow</div>\n" +
+
+        "</div>"
+      );
+
+   }]);
+
