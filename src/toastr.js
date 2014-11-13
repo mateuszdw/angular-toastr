@@ -157,7 +157,7 @@ angular.module('toastr', [])
       container.css({'pointer-events': 'auto'});
       appendTo = options.appendToastTo ? options.appendToastTo : 'body'
       var body = $document.find(appendTo).eq(0);
-      $animate.enter(container, body).then(function() {
+      $animate.enter(container, body, null, function() {
         containerDefer.resolve();
       });
       return containerDefer.promise;
@@ -188,15 +188,9 @@ angular.module('toastr', [])
       toasts.push(newToast);
 
       _setContainer(options).then(function() {
-        if (options.newestOnTop) {
-          $animate.enter(newToast.el, container).then(function() {
-            newToast.scope.init();
-          });
-        } else {
-          $animate.enter(newToast.el, container, container[0].lastChild).then(function() {
-            newToast.scope.init();
-          });
-        }
+        $animate.enter(newToast.el, container, null, function() {
+          newToast.scope.init();
+        });
       });
 
       return newToast;
@@ -263,7 +257,7 @@ angular.module('toastr', [])
       
       if (toast) { // Avoid clicking when fading out
       
-        $animate.leave(toast.el).then(function() {
+        $animate.leave(toast.el, function() {
           toast.scope.$destroy();
           if (container && container.children().length === 0) {
             toasts = [];
